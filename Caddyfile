@@ -1,0 +1,6 @@
+{$DOMAIN} {
+    encode zstd gzip
+
+    @material_ai path /material-ai/*
+    reverse_proxy @material_ai app:8000
+}

@@ -1,0 +1,16 @@
+.git
+.idea
+.codegraph
+.env
+.env.production
+desktop_config.json
+data
+build
+dist
+vendor
+tesseract
+ngrok
+__pycache__
+*.py[cod]
+*.db
+*.log

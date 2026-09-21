@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+  <title>资料上传</title>
+  <style>
+    :root { color-scheme: light; font-family: system-ui, sans-serif; }
+    body { margin: 0; background: #f4f6f8; color: #20252b; }
+    main { max-width: 900px; margin: 48px auto; padding: 0 20px; }
+    .card { background: #fff; border: 1px solid #dfe3e8; border-radius: 8px; padding: 24px; }
+    h1 { margin: 0 0 8px; font-size: 24px; }
+    p { color: #626b75; }
+    .windows { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 20px 0; }
+    .window { background: #fafbfc; border: 1px solid #e3e7ec; border-radius: 8px; padding: 16px; }
+    .window h2 { margin: 0 0 12px; font-size: 16px; color: #20252b; }
+    input[type=file] { display: block; width: 100%; box-sizing: border-box; padding: 8px; border: 1px dashed #b8c0ca; border-radius: 6px; background: #fff; }
+    textarea { width: 100%; box-sizing: border-box; min-height: 180px; resize: vertical; padding: 10px; border: 1px solid #b8c0ca; border-radius: 6px; font: inherit; line-height: 1.6; }
+    textarea:focus, input[type=file]:focus { outline: 2px solid #1769e0; outline-offset: 1px; }
+    .controls { margin: 20px 0; }
+    button { border: 0; border-radius: 6px; padding: 12px 24px; background: #1769e0; color: white; cursor: pointer; font-size: 15px; }
+    button:hover { background: #0f5ac7; }
+    button:disabled { opacity: .6; cursor: wait; }
+    .hint { color: #8a939e; font-size: 13px; margin-top: 8px; }
+    #message { min-height: 24px; color: #626b75; margin: 12px 0; font-size: 15px; }
+    .success { color: #067647; }
+    .error { color: #b42318; }
+    @media (max-width: 720px) {
+      .windows { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+<main>
+  <div class="card">
+    <h1>资料上传</h1>
+    <p>这是 <strong id="customerName"></strong>（<span id="uploadUser"></span>）的专属上传页面，有效期至 <span id="expiresAt"></span>。</p>
+    <p>请上传文件或输入文字，然后点击上传。服务端收到后会保存，稍后统一分类归档。</p>
+    <form id="form">
+      <div class="windows">
+        <div class="window">
+          <h2>📎 上传文件</h2>
+          <input id="files" name="files" type="file" multiple>
+          <div class="hint">支持 PDF / DOCX / PPT / PPTX / TXT / MD / HTML / CSV / XLSX / 图片 / ZIP / TAR / RAR，可多选。</div>
+        </div>
+        <div class="window">
+          <h2>✍️ 输入文字</h2>
+          <textarea id="text" name="text" rows="12" placeholder="在此输入文字，不限长度，将自动转成 .md 文件保存..."></textarea>
+          <div class="hint">文字长度不设上限；为空时只上传文件。</div>
+        </div>
+      </div>
+      <div class="controls">
+        <button id="submit" type="submit">上传</button>
+      </div>
+    </form>
+    <div id="message"></div>
+  </div>
+</main>
+<script>
+const form = document.getElementById('form');
+const input = document.getElementById('files');
+const textInput = document.getElementById('text');
+const button = document.getElementById('submit');
+const message = document.getElementById('message');
+const uploadUser = __UPLOAD_USER_JSON__;
+const customerName = __UPLOAD_CUSTOMER_NAME_JSON__;
+const expiresAt = __UPLOAD_EXPIRES_AT__;
+const accessToken = new URLSearchParams(location.search).get('token') || '';
+document.getElementById('uploadUser').textContent = uploadUser;
+document.getElementById('customerName').textContent = customerName;
+document.getElementById('expiresAt').textContent = new Date(expiresAt * 1000).toLocaleString();
+
+form.addEventListener('submit', async event => {
+  event.preventDefault();
+  const hasFiles = input.files.length > 0;
+  const hasText = textInput.value.trim().length > 0;
+  if (!hasFiles && !hasText) {
+    message.className = 'error';
+    message.textContent = '请先选择文件或输入文字';
+    return;
+  }
+  button.disabled = true;
+  message.className = '';
+  message.textContent = '正在上传，请稍候...';
+  const body = new FormData();
+  for (const file of input.files) body.append('files', file);
+  if (hasText) body.append('text', textInput.value);
+  try {
+    const response = await fetch('/api/upload?token=' + encodeURIComponent(accessToken), { method: 'POST', body });
+    const text = await response.text();
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      throw new Error(text || '服务器返回异常，请查看服务端日志');
+    }
+    if (!response.ok) throw new Error(data.detail || '上传失败');
+    message.className = 'success';
+    let doneText = data.message || '上传成功';
+    if (data.text_file) doneText += `；输入的文字已保存为 ${data.text_file}`;
+    message.textContent = doneText;
+    input.value = '';
+    textInput.value = '';
+  } catch (error) {
+    message.className = 'error';
+    message.textContent = error.message || '上传失败，请重试';
+  } finally {
+    button.disabled = false;
+  }
+});
+</script>
+</body>
+</html>
