@@ -252,7 +252,7 @@ Content-Type: multipart/form-data
 | 字段 | 类型 | 必填 | 说明 |
 |---|---|---|---|
 | `files` | File，可重复 | 否 | 支持同时上传多个文件 |
-| `text` | String | 否 | 服务端保存为 Markdown 文件 |
+| `text` | String | 否 | 服务端保存为 Markdown 文件，分类固定为 `Other`（不参与规则/大模型分类） |
 
 `files` 和 `text` 至少提供一个。
 
