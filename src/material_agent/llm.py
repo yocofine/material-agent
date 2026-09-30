@@ -31,6 +31,8 @@ _CLASSIFY_SYSTEM = """你是教辅资料归档分类器。请根据 filename、p
 - Additional：补充材料、FAQ、appendix、supplementary、how to、upload instructions，且不符合上面更具体的类别。
 - Other：信息不足，无法可靠判断。
 
+用户输入框正文规则：当 path 包含 `[USER_PASTED_TEXT]` 时，表示内容由用户直接粘贴到输入框。必须忽略 `input_xxx.md`、`用户输入文字.md` 等系统生成文件名，只根据 content_snippet 判断。只有正文明确出现补充材料、supplementary、appendix、FAQ、how to、upload instructions、附录、补充说明等证据时才允许归为 Additional；证据不足时归为 Other，禁止把输入框内容默认归为 Additional。
+
 判定优先级（从高到低）：
 1. Past Paper 的明确考试证据；年份只能作为辅助信息，不能单独触发。
 2. Requirement 的 assignment/assessment 信号。
@@ -85,11 +87,12 @@ def _classify_messages(
     images 参数格式为 [(mime, base64_data), ...]，
     按 OpenAI 兼容的 content 数组方式发送，支持多模态模型直接看图。
     """
+    snippet_chars = min(max(get_settings().classification_snippet_chars, 500), 12000)
     text_payload = json.dumps(
         {
             "filename": filename,
             "path": context,
-            "content_snippet": text_snippet[:2000],
+            "content_snippet": text_snippet[:snippet_chars],
         },
         ensure_ascii=False,
     )

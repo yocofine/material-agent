@@ -70,7 +70,7 @@ def create_access_token(
     """Create a signed token and return it with its decoded identity."""
     user_id = normalize_user_id(user_id)
     customer_name = normalize_user_id(customer_name)
-    if customer_source not in {"mysql", "temporary"}:
+    if customer_source not in {"mysql", "temporary", "admin_preview"}:
         raise AccessTokenError("客户来源无效")
     staff_id = normalize_user_id(staff_id)
     staff_name = normalize_user_id(staff_name)
@@ -134,7 +134,7 @@ def validate_access_token(
     except (ValueError, TypeError, KeyError, UnicodeError, json.JSONDecodeError) as exc:
         raise AccessTokenError("访问链接格式无效") from exc
 
-    if identity.customer_source not in {"mysql", "temporary"}:
+    if identity.customer_source not in {"mysql", "temporary", "admin_preview"}:
         raise AccessTokenError("客户来源无效")
 
     current = int(time.time()) if now is None else int(now)

@@ -252,9 +252,11 @@ Content-Type: multipart/form-data
 | 字段 | 类型 | 必填 | 说明 |
 |---|---|---|---|
 | `files` | File，可重复 | 否 | 支持同时上传多个文件 |
-| `text` | String | 否 | 服务端保存为 Markdown 文件，分类固定为 `Other`（不参与规则/大模型分类） |
+| `text` | String | 否 | 服务端保存为 Markdown 文件 |
 
 `files` 和 `text` 至少提供一个。
+
+输入框 `text` 会被标记为用户直接粘贴的正文，分类时忽略系统生成文件名并读取前 `CLASSIFICATION_SNIPPET_CHARS` 个字符（默认4000）。只有正文存在明确补充材料信号时才允许归为 `Additional`；信息不足时归为 `Other`。
 
 成功 `200`：
 
@@ -415,6 +417,16 @@ Content-Type: application/json
   "organized_dir": "/app/data/organized"
 }
 ```
+
+### 8.6 管理员本地上传预览链接
+
+```http
+POST /api/admin/preview-link
+```
+
+仅超级管理员会话可调用，返回一个有效期1小时的上传页预览链接。该接口用于桌面端“打开上传页”，不替代教辅为正式客户或临时客户生成的专属链接。
+
+管理员在浏览器中也可以直接访问 `GET /admin/upload`，系统会生成预览token并自动跳转到上传页。
 
 ## 9. Classbro CRM 第三方 AI 分类接口
 
@@ -640,6 +652,7 @@ TASK_DOWNLOAD_TIMEOUT=120
 TASK_DOWNLOAD_CONCURRENCY=3
 TASK_WORKER_CONCURRENCY=3
 TASK_CLASSIFICATION_CONCURRENCY=5
+CLASSIFICATION_SNIPPET_CHARS=4000
 TASK_ALLOW_PRIVATE_URLS=false
 ```
 

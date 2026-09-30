@@ -50,6 +50,7 @@ class Settings(BaseSettings):
     qwen_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
     qwen_timeout: int = 60          # 单次 LLM 调用超时（秒）
     extract_timeout: int = 60       # 单个文件文本抽取超时（秒）
+    classification_snippet_chars: int = 4000  # 发送给模型的正文字符数
     api_max_file_mb: int = 1024     # 上传分类接口的单文件大小上限
     api_max_archive_mb: int = 300   # 单次上传压缩包原始体积合计上限
     api_max_extracted_mb: int = 600 # 单批次解压后文件体积合计上限

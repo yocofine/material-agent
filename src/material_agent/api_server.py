@@ -47,7 +47,7 @@ from .archive_utils import (
     extract_zip_recursive,
     safe_filename,
 )
-from .classifier import classify_all_async
+from .classifier import PASTED_TEXT_CONTEXT_MARKER, classify_all_async
 from .config import get_settings
 from .customer_mysql import CustomerDatabaseError, CustomerMySqlRepository
 from .llm import QwenClient
@@ -362,6 +362,27 @@ def _pending_batches() -> list[Path]:
     )
 
 
+def _classification_item(path: Path, root: Path, order_id: str) -> FileItem:
+    """Build classification metadata, explicitly marking pasted text input."""
+    relative = path.relative_to(root)
+    if relative.parts and relative.parts[0] == "text_input":
+        return FileItem(
+            order_id=order_id,
+            original_name="用户输入文字.md",
+            local_path=str(path),
+            path_context=(
+                f"{PASTED_TEXT_CONTEXT_MARKER} 用户直接粘贴到输入框的正文；"
+                "忽略系统文件名，只根据正文内容分类"
+            ),
+        )
+    return FileItem(
+        order_id=order_id,
+        original_name=path.name,
+        local_path=str(path),
+        path_context=str(relative),
+    )
+
+
 def _processed_batches() -> list[Path]:
     root = get_settings().workspace_path / "processed"
     if not root.is_dir():
@@ -504,6 +525,11 @@ def _require_access(token: str | None) -> AccessIdentity:
         raise HTTPException(status_code=401, detail="请使用管理员发送的专属上传链接")
     try:
         identity = validate_access_token(token)
+        if identity.customer_source == "admin_preview":
+            settings = get_settings()
+            if identity.staff_id != "__admin__" or not settings.admin_password:
+                raise AccessTokenError("管理员预览链接已失效")
+            return identity
         account = get_staff(identity.staff_id)
         if account is None or not account.active:
             raise AccessTokenError("负责该用户的教辅账号已停用")
@@ -801,12 +827,7 @@ async def classify_pending(
         if not documents:
             continue
         items = [
-            FileItem(
-                order_id=f"UPLOAD:{batch_dir.name}",
-                original_name=path.name,
-                local_path=str(path),
-                path_context=str(path.relative_to(batch_dir)),
-            )
+            _classification_item(path, batch_dir, f"UPLOAD:{batch_dir.name}")
             for path in documents
         ]
         results = await classify_all_async(
@@ -891,7 +912,7 @@ def login_page(request: Request):  # noqa: ANN201
 
 
 @app.post("/api/auth/login")
-def login(payload: dict) -> JSONResponse:
+def login(request: Request, payload: dict) -> JSONResponse:
     username = str(payload.get("username", "")).strip()
     password = str(payload.get("password", ""))
     settings = get_settings()
@@ -914,7 +935,7 @@ def login(payload: dict) -> JSONResponse:
         token,
         max_age=ttl_seconds,
         httponly=True,
-        secure=settings.public_base_url.lower().startswith("https://"),
+        secure=request.url.scheme.lower() == "https",
         samesite="lax",
         path="/",
     )
@@ -1127,6 +1148,42 @@ def create_user_access_link(request: Request, payload: dict) -> dict:
         "issued_at": identity.issued_at,
         "expires_at": identity.expires_at,
     }
+
+
+@app.post("/api/admin/preview-link")
+def create_admin_preview_link(request: Request) -> dict:
+    """Create a short-lived upload-page preview for the local administrator."""
+    principal = _check_admin(request)
+    try:
+        token, identity = create_access_token(
+            "local-preview",
+            3600,
+            customer_name="本机预览",
+            customer_source="admin_preview",
+            staff_id=principal.staff_id,
+            staff_name=principal.display_name,
+        )
+    except AccessTokenError as exc:
+        status = 503 if "LINK_SIGNING_SECRET" in str(exc) else 400
+        raise HTTPException(status_code=status, detail=str(exc)) from exc
+    return {
+        "ok": True,
+        "token": token,
+        "path": f"/?token={token}",
+        "expires_at": identity.expires_at,
+    }
+
+
+@app.get("/admin/upload")
+def admin_upload_entry(request: Request):  # noqa: ANN201
+    """Open a short-lived upload preview from an authenticated admin browser."""
+    principal = _optional_principal(request)
+    if principal is None:
+        return RedirectResponse("/login", status_code=303)
+    if not principal.is_admin:
+        return RedirectResponse("/staff", status_code=303)
+    preview = create_admin_preview_link(request)
+    return RedirectResponse(str(preview["path"]), status_code=303)
 
 
 @app.get("/admin", response_class=HTMLResponse)
@@ -1476,12 +1533,7 @@ async def classify_uploads(
                 )
 
             items = [
-                FileItem(
-                    order_id="API",
-                    original_name=path.name,
-                    local_path=str(path),
-                    path_context=str(path.relative_to(root)),
-                )
+                _classification_item(path, root, "API")
                 for path in document_paths
             ]
             results = await classify_all_async(

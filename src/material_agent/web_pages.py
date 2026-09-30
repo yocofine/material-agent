@@ -118,7 +118,7 @@ Promise.all([loadIdentity(),loadCustomers(),loadPending()]);
 
 ADMIN_HTML = f"""<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>超级管理员</title><style>{_STYLE}</style></head><body><main>
-<div class="card header"><div><h1>超级管理员</h1><div id="identity" class="muted"></div></div><button class="secondary" onclick="logout()">退出登录</button></div>
+<div class="card header"><div><h1>超级管理员</h1><div id="identity" class="muted"></div></div><div><button onclick="location.href='/admin/upload'">打开上传页</button> <button class="secondary" onclick="logout()">退出登录</button></div></div>
 <section class="card"><h2>创建教辅账号</h2><div class="grid"><div><label>登录名</label><input id="username"></div><div><label>教辅姓名</label><input id="displayName"></div><div><label>初始密码</label><input id="password" type="password"></div></div><button id="createStaff">创建账号</button><p id="message"></p></section>
 <section class="card"><h2>教辅账号</h2><table><thead><tr><th>姓名</th><th>登录名</th><th>状态</th><th>操作</th></tr></thead><tbody id="staff"></tbody></table></section>
 <section class="card"><div class="header"><h2>全部待分类批次</h2><button id="classifyAll">分类全部</button></div><div id="pending"></div><p id="pendingMessage"></p></section>

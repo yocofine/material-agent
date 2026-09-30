@@ -27,46 +27,33 @@ from .llm import QwenClient
 from .models import FileItem
 
 logger = logging.getLogger(__name__)
+PASTED_TEXT_CONTEXT_MARKER = "[USER_PASTED_TEXT]"
 
 # 规则命中基准置信度
 _RULE_CONFIDENCE = 0.9
 # LLM 判定为 Other 的置信度阈值，低于此值强制标记待确认
 _LLM_CONFIRM_THRESHOLD = 0.6
+_ADDITIONAL_TEXT_SIGNALS = (
+    "additional material",
+    "supplementary",
+    "appendix",
+    "faq",
+    "frequently asked",
+    "how to",
+    "upload instructions",
+    "补充材料",
+    "补充说明",
+    "附加材料",
+    "附录",
+    "常见问题",
+    "上传说明",
+)
 
 # 值得抽正文 + 调 LLM 的文档类型；其余（csv/xlsx/zip...）直接落 Other
 _DOC_TYPES = {
     ".pdf", ".docx", ".ppt", ".pptx", ".txt", ".md", ".html", ".htm", ".csv", ".xlsx",
     ".png", ".jpg", ".jpeg", ".webp", ".bmp",
 }
-
-# 上传页「输入框文字」由 api_server 存成 text_input/input_<hex>.md。
-# 这段文字是用户随手写的说明，不是课程资料；业务约定：一律固定归 Other，
-# 既不跑关键词规则，也不调用大模型（结果可预期、不消耗 LLM 额度）。
-_TEXT_INPUT_DIR = "text_input"
-_TEXT_INPUT_NOTE = "来自上传页输入框的文字，按约定固定归入 Other"
-
-
-def is_text_input_item(item: FileItem) -> bool:
-    """判断条目是否来自上传页的「输入框文字」（text_input/input_<hex>.md）。"""
-    for raw in (item.path_context, item.local_path, item.original_name):
-        if not raw:
-            continue
-        segments = [seg for seg in str(raw).replace("\\", "/").split("/") if seg]
-        if _TEXT_INPUT_DIR in segments:
-            return True
-    return False
-
-
-def _force_other_for_text_input(item: FileItem) -> FileItem:
-    """把输入框文字固定归入 Other：不跑规则、不调 LLM、不标待确认。"""
-    item.category = Category.OTHER.value
-    item.confidence = 1.0
-    item.classified_by = "manual"
-    item.matched_keyword = _TEXT_INPUT_DIR
-    item.needs_confirmation = False
-    item.note = _TEXT_INPUT_NOTE
-    return item
-
 
 # 学生作品后校验：文件名/正文含这些「作业布置」信号时，学生作品判定存疑
 _STUDENT_GUARD = ("assessment", "brief", "description", "rubric", "requirement", "assignment")
@@ -593,14 +580,37 @@ def _apply_llm_result(item: FileItem, result: dict) -> FileItem:
     return item
 
 
+def _guard_pasted_text_additional(item: FileItem) -> FileItem:
+    """Prevent user-pasted text from defaulting to Additional without evidence."""
+    if (
+        PASTED_TEXT_CONTEXT_MARKER not in item.path_context
+        or item.category != Category.ADDITIONAL.value
+    ):
+        return item
+
+    rule_hit = classify_by_rules("用户输入文字.md", item.extracted_text)
+    if rule_hit is not None and rule_hit[0] is not Category.ADDITIONAL:
+        category, keyword = rule_hit
+        item.category = category.value
+        item.confidence = max(item.confidence, 0.75)
+        item.needs_confirmation = category is Category.OTHER
+        item.matched_keyword = keyword
+        item.note = f"输入框正文命中 {keyword}，已从 Additional 修正为 {category.value}"
+        return item
+
+    normalized = item.extracted_text.casefold()
+    if not any(signal.casefold() in normalized for signal in _ADDITIONAL_TEXT_SIGNALS):
+        item.category = Category.OTHER.value
+        item.confidence = min(item.confidence, 0.55)
+        item.needs_confirmation = True
+        item.note = "输入框正文缺少补充材料证据，已从 Additional 修正为 Other"
+    return item
+
+
 def classify_file(item: FileItem, llm: QwenClient | None, use_rules: bool = False) -> FileItem:
     """就地分类一个文件，返回更新后的 FileItem。"""
     started = time.perf_counter()
     try:
-        # -1) 上传页输入框文字：按业务约定固定归 Other，不跑规则也不调 LLM
-        if is_text_input_item(item):
-            return _force_other_for_text_input(item)
-
         # 0) 非文档类型（压缩包、音视频等）不抽正文，直接 Other
         ext = Path(item.local_path).suffix.lower() if item.local_path else ""
         if ext not in _DOC_TYPES:
@@ -644,7 +654,7 @@ def classify_file(item: FileItem, llm: QwenClient | None, use_rules: bool = Fals
                     context=item.path_context,
                     images=_collect_multimodal_images(item),
                 )
-                return _apply_llm_result(item, result)
+                return _guard_pasted_text_additional(_apply_llm_result(item, result))
             except TimeoutError:
                 item.timed_out = True
                 item.category = FALLBACK_CATEGORY.value
@@ -706,10 +716,6 @@ async def classify_file_async(
 
     started = time.perf_counter()
     try:
-        # -1) 上传页输入框文字：按业务约定固定归 Other，不跑规则也不调 LLM
-        if is_text_input_item(item):
-            return _force_other_for_text_input(item)
-
         # 0) 非文档类型（压缩包、音视频等）不抽正文，直接 Other
         ext = Path(item.local_path).suffix.lower() if item.local_path else ""
         if ext not in _DOC_TYPES:
@@ -766,7 +772,7 @@ async def classify_file_async(
                         context=item.path_context,
                         images=images,
                     )
-                return _apply_llm_result(item, result)
+                return _guard_pasted_text_additional(_apply_llm_result(item, result))
             except TimeoutError:
                 item.timed_out = True
                 item.category = FALLBACK_CATEGORY.value

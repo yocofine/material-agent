@@ -115,6 +115,7 @@ create_env_file() {
     printf '%s\n' 'QWEN_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1'
     printf '%s\n' 'QWEN_TIMEOUT=60'
     printf '%s\n' 'EXTRACT_TIMEOUT=60'
+    printf '%s\n' 'CLASSIFICATION_SNIPPET_CHARS=4000'
     printf '%s\n' 'API_MAX_FILE_MB=1024'
     printf '%s\n' 'API_MAX_ARCHIVE_MB=300'
     printf '%s\n' 'API_MAX_EXTRACTED_MB=600'
