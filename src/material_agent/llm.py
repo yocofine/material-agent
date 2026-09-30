@@ -29,7 +29,7 @@ _CLASSIFY_SYSTEM = """你是教辅资料归档分类器。请根据 filename、p
 - Sample：范文、样例、可套用模板、planning sheet、model answer、exemplar。
 - Student Completed Work：学生自己已经写完或准备提交的作品，例如 my essay、my draft、speech、presentation script、演讲稿。不能仅因为文件名有 presentation 就判 Student Completed Work，需有学生作品语气或 script/speech 信号。
 - Additional：补充材料、FAQ、appendix、supplementary、how to、upload instructions，且不符合上面更具体的类别。
-- Other：信息不足，无法可靠判断。
+- Other：补充说明[xxxxxx]_xxxxxx.txt，信息不足，无法可靠判断。
 
 用户输入框正文规则：当 path 包含 `[USER_PASTED_TEXT]` 时，表示内容由用户直接粘贴到输入框。必须忽略 `input_xxx.md`、`用户输入文字.md` 等系统生成文件名，只根据 content_snippet 判断。只有正文明确出现补充材料、supplementary、appendix、FAQ、how to、upload instructions、附录、补充说明等证据时才允许归为 Additional；证据不足时归为 Other，禁止把输入框内容默认归为 Additional。
 
